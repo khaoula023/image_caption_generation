@@ -13,7 +13,7 @@ This project aims to fill that gap by comparing and evaluating generative models
 
 **Key Features:**
 - Uses **Google Gemini** and **Gemma** generative models.
-- Generates **Arabic captions** for images from the **Flickr dataset** (Flickr8k or Flickr30k).
+- Generates **Arabic captions** for images from the **Flickr dataset** (Flickr8k).
 - Includes **evaluation metrics** for assessing caption quality.
 - Supports **daily batch processing** and **dataset sampling** to manage resource limitations.
 
