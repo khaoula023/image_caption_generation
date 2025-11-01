@@ -1,6 +1,6 @@
 # 🖼️ Image Caption Generation for Arabic using Generative Models
 
-This project focuses on **generating Arabic image captions** using **multiple large-scale generative models** such as **Google Gemini** and **Gemma**, applied to the **Flickr dataset**.  
+This project focuses on **generating Arabic image captions** using **multiple large-scale generative models** such as **Google Gemini**, **Gemma** and **Llama**, applied to the **Flickr dataset**.  
 It explores the ability of modern vision-language models to produce high-quality, semantically rich, and linguistically coherent Arabic captions.
 
 ---
@@ -12,7 +12,7 @@ However, most research focuses on English, leaving Arabic image captioning under
 This project aims to fill that gap by comparing and evaluating generative models that can handle Arabic outputs.
 
 **Key Features:**
-- Uses **Google Gemini** and **Gemma** generative models.
+- Uses **Google Gemini**, **Gemma** and **Llama** generative models.
 - Generates **Arabic captions** for images from the **Flickr dataset** (Flickr8k).
 - Includes **evaluation metrics** for assessing caption quality.
 - Supports **daily batch processing** and **dataset sampling** to manage resource limitations.
