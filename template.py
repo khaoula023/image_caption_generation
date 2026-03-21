@@ -8,28 +8,52 @@ logging.basicConfig(
 )
 
 list_of_files = [
-    ".github/workflows/.gitkeep",
+    # CI / Repo
+    ".github/workflows/ci.yaml",
+    ".gitignore",
+    "README.md",
+    
+    # Core Package
     "src/__init__.py",
     "src/logger.py",
     "src/exception.py",
+
+    # Components (modular pipeline)
     "src/components/__init__.py",
+    "src/components/data_loader.py",
+    "src/components/preprocessing.py",
+    "src/components/evaluator.py",
+
+    # Pipeline
+    "src/pipeline/__init__.py",
+    "src/pipeline/train_pipeline.py",
+    "src/pipeline/eval_pipeline.py",
+
+    # Utilities
     "src/utils/__init__.py",
     "src/utils/common.py",
+    "src/utils/metrics.py",
+    "src/utils/visualization.py",
+
+    # Configuration
     "src/config/__init__.py",
     "src/config/configuration.py",
-    "src/pipeline/__init__.py",
+
+    # Entities / Schemas
     "src/entity/__init__.py",
+    "src/entity/artifacts_entity.py",
+
+    # Constants
     "src/constants/__init__.py",
-    "requirements.txt",
-    "setup.py",
-    "research/model_trainer.ipynb",
-    "templates/website.html",
-    "static/style.css",
-    "config/config.yaml",
-    "params.yaml",
+
+    # Research / Experiments
+    "research/experiments.ipynb",
+    "research/analysis.ipynb",
+
+    # Deployment
     "Dockerfile",
-    "app.py"
-    
+    "requirements.txt",
+    "setup.py"
 ]
 
 for filepath in list_of_files:
