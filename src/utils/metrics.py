@@ -16,7 +16,12 @@ import torch
 from transformers import CLIPProcessor, CLIPModel, CLIPConfig
 from pycocoevalcap.cider.cider import Cider
 from nltk.tokenize import word_tokenize as simple_word_tokenize
+import re
+import json
+import torch
+import traceback
 
+from src.utils import common
 from src.logger import logging
 from src.exception import CustomException
 
@@ -307,3 +312,314 @@ def compute_cider(caption_data, generated_col):
     except Exception as e:
         logging.error(f"Error occurred during CIDEr computation for {generated_col}")
         raise CustomException(e, sys)
+    
+
+
+def build_clair_prompt(candidate, references):
+    """
+    Build CLAIR-style prompt for one candidate caption and its references.
+    Captions are in Arabic, prompt in English.
+    """
+    try:
+        candidate_block = f"- {candidate}\n"
+        reference_block = "".join([f"- {r}\n" for r in references])
+
+        prompt = f"""\
+            You are trying to tell if a candidate set of captions is describing the same image as a reference set of captions.
+
+            The captions are written in Arabic.
+
+            Candidate set:
+            {''.join(candidate_block)}
+
+            Reference set:
+            {''.join(reference_block)}
+
+            On a precise scale from 0 to 100, how likely is it that the candidate set is describing the same image as the reference set?
+
+            Return ONLY valid JSON with:
+            {{"score": number between 0 and 100, "reason": "short explanation"}}
+            """
+        return prompt
+
+    except Exception as e:
+        logging.error(f"Error building CLAIR prompt: {e}")
+        raise CustomException(e, sys)
+
+
+def parse_clair_response(response):
+    """
+    Parse CLAIR model response to extract 'score' and 'reason'.
+    """
+    try:
+        # Try to parse JSON (if complete)
+        match = re.search(r"\{.*\"score\".*?\}", response, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            score = float(data.get("score", 0))
+            reason = data.get("reason", "Unknown")
+            return score, reason
+
+        # Fallback: extract first occurrence of "score": number
+        score_match = re.search(r'"score"\s*:\s*([0-9]+(?:\.[0-9]+)?)', response)
+        score = float(score_match.group(1)) if score_match else 0.0
+
+        # Extract reason if possible
+        reason_match = re.search(r'"reason"\s*:\s*"(.*?)"', response, re.DOTALL)
+        reason = reason_match.group(1).strip() if reason_match else "Parsed from text"
+
+        return score, reason
+
+    except Exception as e:
+        logging.error(f"Error parsing CLAIR response: {e}\nResponse was: {response}")
+        raise CustomException(e, sys)
+
+
+def batch_clair_score(gens, refs, model, processor, device,  max_new_tokens=80):
+    """
+    Compute CLAIR scores for a batch (3 references per caption).
+
+    Args:
+        gens (list[str]): generated captions
+        refs (list[list[str]]): list of 3 references per caption
+
+    Returns:
+        avg_score (float): average CLAIR score (0–1)
+        scores (list): individual normalized scores
+        reasons (list): explanations
+    """
+    try:
+        logging.info("Starting batch CLAIR computation")
+
+        # Validation
+        if not gens or not refs:
+            raise ValueError("gens and refs cannot be empty")
+
+        if len(gens) != len(refs):
+            raise ValueError("gens and refs must have same length")
+
+        if not all(isinstance(r, list) and len(r) == 3 for r in refs):
+            raise ValueError("Each caption must have exactly 3 references")
+
+        # Build prompts
+        prompts = [build_clair_prompt(gen, ref_list) for gen, ref_list in zip(gens, refs)]
+        logging.info(f"Built {len(prompts)} prompts for CLAIR evaluation")
+
+        # Tokenize batch
+        inputs = processor(prompts, return_tensors="pt", padding=True, truncation=True).to(device)
+
+        # Generate responses
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
+        responses = processor.batch_decode(outputs, skip_special_tokens=True)
+        logging.debug(f"Raw CLAIR responses: {responses}")
+
+        scores = []
+        reasons = []
+
+        for response in responses:
+            score, reason = parse_clair_response(response)
+            scores.append(score / 100)  # normalize to [0,1]
+            reasons.append(reason)
+
+        avg_score = sum(scores) / len(scores) if scores else 0.0
+        logging.info(f"Batch CLAIR average score: {avg_score:.4f}")
+
+        return avg_score, scores, reasons
+
+    except Exception as e:
+        logging.error(f"Error in batch CLAIR computation: {e}")
+        raise CustomException(e, sys)
+
+
+
+def build_fleur_prompt(caption):
+    """
+    Build a FLEUR prompt for a single image caption.
+    """
+    try:
+        if not isinstance(caption, str):
+            raise ValueError(f"Caption must be a string, got {type(caption)}")
+
+        prompt = f"""<image>
+
+            You are an image caption evaluator. Your job is to rate how accurately the given caption describes the image content.
+            Caption:
+            "{caption}"
+
+            Respond ONLY once and EXACTLY in the following format:
+            Score: <float number between 0.00 and 10.00 with two decimal digits>
+            Explanation (in Arabic): <brief justification in Arabic explaining WHY this score was given>
+
+            Write the explanation in Modern Standard Arabic (الفصحى), without any English words or repetition of the caption.
+            """.strip()
+
+        logging.info("FLEUR prompt built successfully for caption..")  # log first 30 chars
+        return prompt
+
+    except Exception as e:
+        logging.error("Error building FLEUR prompt for caption: ", exc_info=True)
+        raise CustomException(e, sys)
+
+
+def parse_fleur_output(response):
+    """
+    Safe parsing function with extensive error handling
+    """
+    try:
+        # Check if response is None or empty
+        if response is None:
+            #print("Response is None")
+            return None, None
+            
+        if not isinstance(response, str):
+            #print(f"Response is not string: {type(response)}")
+            return None, None
+            
+        response = response.strip()
+        if not response:
+            print("Response is empty string")
+            return None, None
+        
+       # print(f"Parsing response: '{response}'")
+        
+        # Look for score pattern
+        score_pattern = r'Score:\s*(\d+\.\d{2}|\d+\.\d|\d+)'
+        score_match = re.search(score_pattern, response)
+        
+        if not score_match:
+            #print("No score pattern found")
+            return None, None
+        
+        score_text = score_match.group(1)
+        try:
+            score = float(score_text)
+        except ValueError:
+            #print(f"Could not convert score to float: '{score_text}'")
+            return None, None
+        
+        # Validate score range
+        if not (0.0 <= score <= 10.0):
+            #print(f"Score out of range: {score}")
+            return None, None
+        
+        # Extract explanation - look for Arabic text after score
+        explanation = "لا توجد شرح"  # Default
+        
+        # Method 1: Look for explicit explanation marker
+        explanation_patterns = [
+            r'Explanation\s*\(in Arabic\):\s*(.*)',
+            r'Explanation:\s*(.*)',
+            r'شرح:\s*(.*)'
+        ]
+        
+        for pattern in explanation_patterns:
+            exp_match = re.search(pattern, response, re.DOTALL)
+            if exp_match:
+                explanation = exp_match.group(1).strip()
+                break
+        else:
+            # Method 2: Extract text after score (assuming it's Arabic)
+            # Split response after the score match
+            after_score = response[score_match.end():].strip()
+            if after_score:
+                # Take the first line or reasonable chunk
+                explanation = after_score.split('\n')[0].strip()
+                if not explanation or len(explanation) < 5:  # Too short
+                    explanation = "لا توجد شرح"
+        
+        #print(f"Successfully parsed - Score: {score}, Explanation: {explanation}")
+        return score, explanation
+        
+    except Exception as e:
+        #print(f"Error in parse_fleur_output: {e}")
+        traceback.print_exc()
+        return None, None
+
+def generate_fleur_response(image, caption, model, processor, device, max_new_tokens=100 ):
+    """
+    Generate FLEUR response for a single image and caption.
+    """
+    try:
+        # Build prompt
+        prompt = build_fleur_prompt(caption)
+
+        # Conversation format for the model:
+        messages = [
+            {"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}
+        ]
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+        # Prepare inputs
+        inputs = processor(text=[text], images=[image], padding=True, return_tensors="pt").to(device)
+
+        # Generate model outputs
+        with torch.inference_mode(), torch.autocast("cuda"):
+            generated_ids = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                use_cache=True,
+                eos_token_id=processor.tokenizer.eos_token_id,
+                pad_token_id=processor.tokenizer.pad_token_id
+            )
+
+        # Decode response
+        response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        # Remove prompt from response if included
+        if text in response:
+            response = response.replace(text, "").strip()
+
+        # Parse FLEUR output
+        score, explanation = parse_fleur_output(response)
+
+        # Clean up memory
+        del inputs
+        torch.cuda.empty_cache()
+
+        return score, explanation
+
+    except Exception as e:
+        logging.error(f"Error generating FLEUR response: {e}", exc_info=True)
+        return None, None
+
+
+def compute_fleur_scores(df, images_paths_full, col_name):
+    """
+    Compute FLEUR scores for a dataframe of captions and corresponding images.
+
+    Args:
+        df (pd.DataFrame): dataframe with caption column
+        images_paths_full (list): list of full image paths
+        col_name (str): name of the column to use for captions
+
+    Returns:
+        fleur_scores (list)
+        fleur_explanations (list)
+    """
+    fleur_scores = []
+    fleur_explanations = []
+
+    for i in tqdm(range(len(df)), desc=f"FAST FLEUR ({col_name})"):
+        img_path = images_paths_full[i]
+        caption = df[col_name].iloc[i]
+
+        # Load image
+        image = common.load_image(img_path)
+        if image is None:
+            fleur_scores.append(None)
+            fleur_explanations.append(None)
+            continue
+
+        # Generate score & explanation
+        score, explanation = generate_fleur_response(image, caption)
+        fleur_scores.append(score)
+        fleur_explanations.append(explanation)
+
+        # Free image memory
+        del image
+        torch.cuda.empty_cache()
+
+    return fleur_scores, fleur_explanations

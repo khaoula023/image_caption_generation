@@ -180,3 +180,17 @@ def get_existing_images(images_folder, data):
     except Exception as e:
         logging.error("Error occurred while checking existing images")
         raise CustomException(e, sys)
+    
+def load_image(img_path):
+    """
+    Load an image from disk and convert to RGB.
+    """
+    try:
+        if not os.path.exists(img_path):
+            logging.warning("Image not found")
+            return None
+        image = Image.open(img_path).convert("RGB")
+        return image
+    except Exception as e:
+        logging.error(f"Error loading image : {e}", exc_info=True)
+        raise CustomException(e, sys)
