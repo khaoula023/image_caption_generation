@@ -623,3 +623,91 @@ def compute_fleur_scores(df, images_paths_full, col_name):
         torch.cuda.empty_cache()
 
     return fleur_scores, fleur_explanations
+
+
+def chair_score(image_path, caption, detector):
+    """
+    Compute CHAIR score (sentence-level and instance-level hallucination).
+
+    Args:
+        image_path (str): path to image
+        caption (str): generated caption (Arabic)
+        detector: YOLO model
+
+    Returns:
+        dict: CHAIRs, CHAIRi, hallucinated objects, stats
+    """
+    try:
+        logging.info("Starting CHAIR computation")
+
+        # 1️⃣ YOLO detections (as GT)
+        results = detector(image_path, verbose=False)
+
+        if not results or results[0].boxes is None:
+            logging.warning("No detections found by YOLO")
+            detected_yolo = []
+        else:
+            detected_yolo = [int(c) for c in results[0].boxes.cls]
+
+        detected_set = set(detected_yolo)
+        logging.debug(f"Detected objects (YOLO IDs): {detected_set}")
+
+        # Sentence splitter (supports Arabic punctuation)
+        SENTENCE_SPLITTER = re.compile(r'[.!?؟]+')
+
+        # 2️⃣ Preprocess caption
+        caption = common.normalize_arabic(str(caption)).lower()
+        sentences = [s.strip() for s in SENTENCE_SPLITTER.split(caption) if s.strip()]
+        logging.debug(f"Split into {len(sentences)} sentences")
+
+        objects_per_sent = []
+        all_nouns_yolo = []
+
+        for sent in sentences:
+            sent_objs = common.extract_visual_objects(sent, common.arabic_to_yolo)
+            objects_per_sent.append(sent_objs)
+            all_nouns_yolo.extend(sent_objs)
+
+        num_sents = len(sentences)
+
+        if num_sents == 0:
+            logging.warning("No valid sentences found in caption")
+            return {"CHAIRs": 0, "CHAIRi": 0, "hallucinated": []}
+
+        # 3️⃣ CHAIRs (sentence-level hallucination)
+        hall_sents = sum(
+            1 for sent_objs in objects_per_sent
+            if any(obj not in detected_set for obj in sent_objs)
+        )
+        CHAIRs = hall_sents / num_sents
+
+        # 4️⃣ CHAIRi (instance-level hallucination)
+        unique_objs = list(set(all_nouns_yolo))
+
+        if len(unique_objs) == 0:
+            CHAIRi = 0
+            hall_objs = []
+            logging.info("No objects extracted from caption")
+        else:
+            hall_objs = [obj for obj in unique_objs if obj not in detected_set]
+            CHAIRi = len(hall_objs) / len(unique_objs)
+
+        # 5️⃣ Arabic labels
+        hallucinated = [common.yolo_to_arabic.get(obj, str(obj)) for obj in hall_objs]
+
+        result = {
+            "CHAIRs": CHAIRs,
+            "CHAIRi": CHAIRi,
+            "hallucinated": hallucinated,
+            "sentences": num_sents,
+            "total_objects": len(unique_objs)
+        }
+
+        logging.info("CHAIR score computed successfully")
+        return result
+
+    except Exception as e:
+        logging.error("Error in CHAIR computation")
+        raise CustomException(e, sys)
+
+

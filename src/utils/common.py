@@ -192,5 +192,294 @@ def load_image(img_path):
         image = Image.open(img_path).convert("RGB")
         return image
     except Exception as e:
-        logging.error(f"Error loading image : {e}", exc_info=True)
+        logging.error("Error loading image ")
         raise CustomException(e, sys)
+
+yolo_to_arabic = {
+    # 🔹 People & body
+    "person": "شخص",
+    "man": "رجل",
+    "woman": "امرأة",
+    "child": "طفل",
+    "baby": "رضيع",
+    "face": "وجه",
+    "hand": "يد",
+    "foot": "قدم",
+    "eye": "عين",
+    "ear": "أذن",
+    "mouth": "فم",
+    "hair": "شعر",
+    "beard": "لحية",
+
+    # 🔹 Animals
+    "cat": "قط",
+    "dog": "كلب",
+    "horse": "حصان",
+    "sheep": "خروف",
+    "cow": "بقرة",
+    "elephant": "فيل",
+    "bear": "دب",
+    "zebra": "حمار وحشي",
+    "giraffe": "زرافة",
+    "lion": "أسد",
+    "tiger": "نمر",
+    "monkey": "قرد",
+    "bird": "طائر",
+    "parrot": "ببغاء",
+    "chicken": "دجاجة",
+    "duck": "بطة",
+    "fish": "سمكة",
+    "frog": "ضفدع",
+    "snake": "ثعبان",
+
+    # 🔹 Vehicles
+    "bicycle": "دراجة",
+    "motorcycle": "دراجة نارية",
+    "scooter": "سكوتر",
+    "car": "سيارة",
+    "bus": "حافلة",
+    "train": "قطار",
+    "truck": "شاحنة",
+    "boat": "قارب",
+    "ship": "سفينة",
+    "airplane": "طائرة",
+    "helicopter": "مروحية",
+    "taxi": "تاكسي",
+    "subway": "مترو",
+    "van": "فان",
+
+    # 🔹 Household / furniture
+    "bed": "سرير",
+    "chair": "كرسي",
+    "couch": "أريكة",
+    "sofa": "كنبة",
+    "table": "طاولة",
+    "dining table": "طاولة طعام",
+    "bookshelf": "رف كتب",
+    "wardrobe": "خزانة",
+    "desk": "مكتب",
+    "drawer": "دولاب",
+    "lamp": "مصباح",
+    "fan": "مروحة",
+    "mirror": "مرآة",
+    "window": "نافذة",
+    "door": "باب",
+    "curtain": "ستارة",
+    "carpet": "سجادة",
+    "pillow": "وسادة",
+    "blanket": "بطانية",
+    "vase": "مزهرية",
+
+    # 🔹 Electronics
+    "tv": "تلفاز",
+    "laptop": "حاسوب محمول",
+    "desktop": "حاسوب مكتبي",
+    "mouse": "فأرة",
+    "keyboard": "لوحة مفاتيح",
+    "remote": "جهاز تحكم",
+    "cell phone": "هاتف محمول",
+    "camera": "كاميرا",
+    "headphones": "سماعات",
+    "microphone": "ميكروفون",
+    "speaker": "مكبر صوت",
+    "watch": "ساعة يد",
+
+    # 🔹 Food & drinks
+    "apple": "تفاح",
+    "banana": "موز",
+    "orange": "برتقال",
+    "grapes": "عنب",
+    "watermelon": "بطيخ",
+    "strawberry": "فراولة",
+    "lemon": "ليمون",
+    "bread": "خبز",
+    "cheese": "جبن",
+    "egg": "بيض",
+    "milk": "حليب",
+    "coffee": "قهوة",
+    "tea": "شاي",
+    "juice": "عصير",
+    "pizza": "بيتزا",
+    "cake": "كعكة",
+    "donut": "دونات",
+    "sandwich": "سندويتش",
+    "hot dog": "هوت دوغ",
+    "bottle": "زجاجة",
+    "cup": "كوب",
+    "fork": "شوكة",
+    "knife": "سكين",
+    "spoon": "ملعقة",
+    "bowl": "وعاء",
+    "wine glass": "كأس نبيذ",
+
+    # 🔹 Clothes & accessories
+    "hat": "قبعة",
+    "cap": "طاقية",
+    "shirt": "قميص",
+    "t-shirt": "تي شيرت",
+    "pants": "بنطال",
+    "jeans": "جينز",
+    "dress": "فستان",
+    "skirt": "تنورة",
+    "shoes": "أحذية",
+    "socks": "جوارب",
+    "belt": "حزام",
+    "tie": "ربطة عنق",
+    "gloves": "قفازات",
+    "scarf": "وشاح",
+    "bag": "حقيبة",
+    "handbag": "حقيبة يد",
+    "backpack": "حقيبة ظهر",
+    "ring": "خاتم",
+    "necklace": "عقد",
+    "bracelet": "سوار",
+
+    # 🔹 Nature / outdoors
+    "tree": "شجرة",
+    "flower": "زهرة",
+    "grass": "عشب",
+    "bush": "شجيرة",
+    "rock": "صخرة",
+    "mountain": "جبل",
+    "river": "نهر",
+    "lake": "بحيرة",
+    "beach": "شاطئ",
+    "sand": "رمل",
+    "sky": "سماء",
+    "sun": "شمس",
+    "moon": "قمر",
+    "cloud": "سحابة",
+    "star": "نجمة",
+    "rain": "مطر",
+    "snow": "ثلج",
+    "leaf": "ورقة شجر",
+
+    # 🔹 Sports / toys
+    "ball": "كرة",
+    "basketball": "كرة سلة",
+    "soccer ball": "كرة قدم",
+    "tennis racket": "مضرب تنس",
+    "frisbee": "قرص طائر",
+    "skateboard": "لوح تزلج صغير",
+    "trampoline": "ترامبولين",
+    "swing": "أرجوحة",
+    "slide": "زلاجة",
+    "doll": "دمية",
+    "puzzle": "لغز",
+    "kite": "طائرة ورقية",
+    "baseball bat": "مضرب بيسبول",
+    "baseball glove": "قفاز بيسبول",
+
+    # 🔹 Office / study
+    "book": "كتاب",
+    "notebook": "دفتر",
+    "pen": "قلم",
+    "pencil": "قلم رصاص",
+    "eraser": "ممحاة",
+    "ruler": "مسطرة",
+    "scissors": "مقص",
+    "stapler": "دباسة",
+    "paper": "ورق",
+    "folder": "مجلد",
+    "calculator": "آلة حاسبة",
+
+    # 🔹 Miscellaneous
+    "umbrella": "مظلة",
+    "flag": "علم",
+    "wallet": "محفظة",
+    "key": "مفتاح",
+    "toy": "لعبة",
+    "clock": "ساعة",
+    "bottle cap": "غطاء زجاجة",
+    "plastic bag": "كيس بلاستيك",
+    "chair mat": "حافظة كرسي",
+    "candle": "شمعة",
+    "poster": "ملصق",
+    "picture": "صورة",
+    "phone charger": "شاحن هاتف",
+    "remote control": "جهاز تحكم",
+    "glasses": "نظارات",
+    "sunglasses": "نظارة شمس",
+    "towel": "منشفة"
+}
+
+arabic_to_yolo = {normalize_arabic(v): k for k, v in yolo_to_arabic.items()}
+
+def normalize_arabic(text):
+    """
+    Normalize Arabic text for NLP tasks (e.g., object matching).
+
+    Steps:
+    - Remove diacritics (tashkeel)
+    - Normalize different letter forms
+    - Remove non-Arabic characters (punctuation, numbers, symbols)
+    - Remove definite article "ال"
+    - Clean extra spaces
+    - Convert to lowercase
+    """
+    try:
+        # 🔹 Define Arabic diacritics (tashkeel) to remove
+        diacritics = re.compile("""
+            ّ | َ | ً | ُ | ٌ | ِ | ٍ | ْ | ـ
+        """, re.VERBOSE)
+
+        # 🔹 Remove diacritics (e.g., َ ً ُ → improves matching consistency)
+        text = re.sub(diacritics, '', text)
+        
+        # 🔹 Normalize different forms of letters to a standard form
+        text = text.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+        
+        # Normalize variants of yaa and waw
+        text = text.replace("ى", "ي").replace("ئ", "ي").replace("ؤ", "و")
+        
+        # Normalize taa marbuta → haa (helps unify word endings)
+        text = text.replace("ة", "ه")
+        
+        # 🔹 Remove everything that is NOT Arabic letters or spaces
+        text = re.sub(r"[^ء-ي\s]", " ", text)
+        
+        # 🔹 Remove the definite article "ال" (prefix)
+        text = re.sub(r"\bال", "", text)
+        
+        # 🔹 Remove extra spaces created during cleaning
+        text = re.sub(r"\s+", " ", text).strip()
+        
+        # 🔹 Convert to lowercase (safe after normalization)
+        return text.lower()
+    except Exception as e:
+        logging.error("Error Normalize Arabic text ")
+        raise CustomException(e, sys)
+
+    
+def simple_singularize(word):
+    try:
+        if word.endswith('s') and len(word) > 3:
+            return word[:-1]
+        return word
+    except Exception as e:
+        logging.error("Error simple singularize words")
+        raise CustomException(e, sys)
+
+def extract_visual_objects(text, arabic_to_yolo):
+    try: 
+        if not isinstance(text, str) or text.strip() == "":
+            return []
+
+        text = normalize_arabic(str(text)).lower()
+
+        # Safer tokenization for Arabic (avoid punkt issues)
+        words = re.findall(r'\w+', text)
+
+        objects = []
+        for word in words:
+            lemma = simple_singularize(word)
+
+            if lemma in arabic_to_yolo:
+                objects.append(arabic_to_yolo[lemma])
+
+        return list(set(objects)) 
+    except Exception as e:
+        logging.error("Error extracting visual objects ")
+        raise CustomException(e, sys)
+    
+    
